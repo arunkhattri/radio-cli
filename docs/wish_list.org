@@ -8,7 +8,10 @@
 + [X] Quit elegantly
 + [X] for playing, no go code, simply hand it over to ~mpv~
 + [X] pleasing aesthetics on terminal
-** Version 2 [0/3]
-+ [ ] configuration file in ~/.config~
+** Version 2 [1/3]
++ [X] configuration file in ~/.config~
 + [ ] Search Radio Station and add option to stations list.
 + [ ] Record the playing station.
+** Searching Radio Stations
++ go package: https://gitlab.com/AgentNemo/goradios
++ radio-browser API: https://api.radio-browser.info/
