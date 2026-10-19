@@ -1,0 +1,14 @@
+* Wish list for GO CLI RADIO
+** Version 1 [8/8]
++ [X] CLI App
++ [X] Play stations from a list (json/txt)
++ [X] Play/Pause
++ [X] Selection from available radio stations (station list)
++ [X] Next station
++ [X] Quit elegantly
++ [X] for playing, no go code, simply hand it over to ~mpv~
++ [X] pleasing aesthetics on terminal
+** Version 2 [0/3]
++ [ ] configuration file in ~/.config~
++ [ ] Search Radio Station and add option to stations list.
++ [ ] Record the playing station.

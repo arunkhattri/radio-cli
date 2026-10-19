@@ -12,6 +12,7 @@
 
 !*.go
 !*.json
+!*.org
 !go.sum
 !go.mod
 

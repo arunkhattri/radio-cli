@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -149,20 +150,24 @@ func (m *model) View() string {
 	}
 
 	if m.showList {
-		content := titleStyle.Render("📻 STATION LIST") + "\n\n"
+		var sb strings.Builder
+		sb.WriteString(titleStyle.Render("📻 STATION LIST"))
+		sb.WriteString("\n\n")
 		for i, st := range m.stations {
 			cursor := "  "
 			line := fmt.Sprintf("%s[%2d] %s", cursor, i+1, st.Name)
 			if i == m.index {
 				cursor = "▶ "
 				line = fmt.Sprintf("%s[%2d] %s", cursor, i+1, st.Name)
-				content += lipgloss.NewStyle().Foreground(lipgloss.Color("51")).Bold(true).Render(line) + "\n"
+				sb.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color("51")).Bold(true).Render(line))
+				sb.WriteString("\n")
 			} else {
-				content += line + "\n"
+				sb.WriteString(line)
+				sb.WriteString("\n")
 			}
 		}
-		content += "\n[↑/↓] Select  [Enter] Play  [l/esc] Back"
-		return boxStyle.Render(content)
+		sb.WriteString("\n[↑/↓] Select  [Enter] Play  [l/esc] Back")
+		return boxStyle.Render(sb.String())
 	}
 
 	currentStation := m.stations[m.index].Name
