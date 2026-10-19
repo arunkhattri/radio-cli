@@ -3,10 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -27,7 +27,6 @@ type model struct {
 	isPaused bool
 	showList bool
 	cmd      *exec.Cmd
-	stdin    io.WriteCloser
 	err      error
 }
 
@@ -57,16 +56,9 @@ func (m *model) startPlayback() {
 
 	station := m.stations[m.index]
 	m.cmd = exec.Command("mpv", "--no-video", "--input-terminal=no", station.URL)
-
-	var err error
-	m.stdin, err = m.cmd.StdinPipe()
-	if err != nil {
-		m.err = err
-		return
-	}
-
 	m.cmd.Stdout = nil
 	m.cmd.Stderr = nil
+
 	if err := m.cmd.Start(); err != nil {
 		m.err = err
 	}
@@ -74,9 +66,14 @@ func (m *model) startPlayback() {
 }
 
 func (m *model) togglePause() {
-	if m.stdin != nil {
-		_, _ = m.stdin.Write([]byte("cycle pause\n"))
-		m.isPaused = !m.isPaused
+	if m.cmd != nil && m.cmd.Process != nil {
+		if m.isPaused {
+			_ = m.cmd.Process.Signal(syscall.SIGCONT)
+			m.isPaused = false
+		} else {
+			_ = m.cmd.Process.Signal(syscall.SIGSTOP)
+			m.isPaused = true
+		}
 	}
 }
 
@@ -116,13 +113,18 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.index++
 				m.startPlayback()
 			}
+
+		case "enter":
+			if m.showList {
+				m.startPlayback()
+				m.showList = false
+			}
 		}
 	}
 	return m, nil
 }
 
 func (m *model) View() string {
-	// Styles using Lipgloss
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("63")).
@@ -150,24 +152,26 @@ func (m *model) View() string {
 		content := titleStyle.Render("📻 STATION LIST") + "\n\n"
 		for i, st := range m.stations {
 			cursor := "  "
-			style := lipgloss.NewStyle()
+			line := fmt.Sprintf("%s[%2d] %s", cursor, i+1, st.Name)
 			if i == m.index {
 				cursor = "▶ "
-				style = style.Foreground(lipgloss.Color("51")).Bold(true)
+				line = fmt.Sprintf("%s[%2d] %s", cursor, i+1, st.Name)
+				content += lipgloss.NewStyle().Foreground(lipgloss.Color("51")).Bold(true).Render(line) + "\n"
+			} else {
+				content += line + "\n"
 			}
-			content += style.Render(fmt.Sprintf("%s[%d] %s\n", cursor, i+1, st.Name))
 		}
-		content += "\n[↑/↓] Select Station  [l/esc] Back"
+		content += "\n[↑/↓] Select  [Enter] Play  [l/esc] Back"
 		return boxStyle.Render(content)
 	}
 
 	currentStation := m.stations[m.index].Name
-	if len(currentStation) > 28 {
-		currentStation = currentStation[:25] + "..."
+	if len(currentStation) > 32 {
+		currentStation = currentStation[:29] + "..."
 	}
 
 	body := fmt.Sprintf(
-		"%s\n\n  Status  : %s\n  Station : %s\n\n──────────────────────────────\n  [n] Next   [p] Pause   [l] List   [q] Quit",
+		"%s\n\n  Status  : %s\n  Station : %s\n\n──────────────────────────────────────────────\n  [n] Next   [p] Pause   [l] List   [q] Quit",
 		titleStyle.Render("🎵 GO CLI RADIO"),
 		statusStr,
 		lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86")).Render(currentStation),
