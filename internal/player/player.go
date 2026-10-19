@@ -34,6 +34,9 @@ type Player struct {
 	Cmd       *exec.Cmd
 	Err       error
 
+	// Track currently active stream (from playlist or search)
+	CurrentStation config.Station
+
 	// Search state fields
 	TextInput     textinput.Model
 	SearchResults []search.StationResult
@@ -46,13 +49,19 @@ func NewPlayer(stations []config.Station) *Player {
 	ti.Placeholder = "Type genre, country, or station name..."
 	ti.Focus()
 	ti.CharLimit = 64
-	ti.Width = 40
+	ti.Width = 48
 
-	return &Player{
+	p := &Player{
 		Stations:  stations,
 		TextInput: ti,
 		ViewState: ViewPlayer,
 	}
+
+	if len(stations) > 0 {
+		p.CurrentStation = stations[0]
+	}
+
+	return p
 }
 
 func (m *Player) startPlayback() {
@@ -61,12 +70,11 @@ func (m *Player) startPlayback() {
 		_ = m.Cmd.Wait()
 	}
 
-	if len(m.Stations) == 0 {
+	if m.CurrentStation.URL == "" {
 		return
 	}
 
-	station := m.Stations[m.Index]
-	m.Cmd = exec.Command("mpv", "--no-video", "--input-terminal=no", station.URL)
+	m.Cmd = exec.Command("mpv", "--no-video", "--input-terminal=no", m.CurrentStation.URL)
 	m.Cmd.Stdout = nil
 	m.Cmd.Stderr = nil
 
@@ -88,12 +96,23 @@ func (m *Player) togglePause() {
 	}
 }
 
-// saveStationToFile appends a newly discovered station to stations.json
-func (m *Player) saveStationToFile(st search.StationResult) {
-	newStation := config.Station{Name: st.Name, URL: st.URL}
-	m.Stations = append(m.Stations, newStation)
+// saveCurrentStation saves whichever station is currently playing into stations.json
+func (m *Player) saveCurrentStation() {
+	if m.CurrentStation.URL == "" {
+		m.StatusMessage = "No active station to save"
+		return
+	}
 
-	// Resolve global config path
+	// Prevent duplicates
+	for _, st := range m.Stations {
+		if st.URL == m.CurrentStation.URL {
+			m.StatusMessage = "Station already saved in list!"
+			return
+		}
+	}
+
+	m.Stations = append(m.Stations, m.CurrentStation)
+
 	home, err := os.UserConfigDir()
 	var targetPath string
 	if err == nil {
@@ -105,7 +124,7 @@ func (m *Player) saveStationToFile(st search.StationResult) {
 	cfg := config.Config{Stations: m.Stations}
 	file, err := os.Create(targetPath)
 	if err != nil {
-		m.StatusMessage = "Error saving station file"
+		m.StatusMessage = "Error opening station file"
 		return
 	}
 	defer file.Close()
@@ -117,11 +136,11 @@ func (m *Player) saveStationToFile(st search.StationResult) {
 		return
 	}
 
-	m.StatusMessage = fmt.Sprintf("Saved: %s", st.Name)
+	m.StatusMessage = fmt.Sprintf("Saved: %s", m.CurrentStation.Name)
 }
 
 func (m *Player) Init() tea.Cmd {
-	if len(m.Stations) > 0 {
+	if m.CurrentStation.URL != "" {
 		m.startPlayback()
 	}
 	return textinput.Blink
@@ -132,7 +151,6 @@ func (m *Player) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		// Clear transient status message on keypress
 		m.StatusMessage = ""
 
 		switch m.ViewState {
@@ -147,6 +165,7 @@ func (m *Player) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "n":
 				if len(m.Stations) > 0 {
 					m.Index = (m.Index + 1) % len(m.Stations)
+					m.CurrentStation = m.Stations[m.Index]
 					m.startPlayback()
 				}
 
@@ -160,6 +179,9 @@ func (m *Player) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.ViewState = ViewSearch
 				m.TextInput.Focus()
 				return m, textinput.Blink
+
+			case "a":
+				m.saveCurrentStation()
 			}
 
 		case ViewList:
@@ -174,15 +196,18 @@ func (m *Player) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "up", "k":
 				if m.Index > 0 {
 					m.Index--
+					m.CurrentStation = m.Stations[m.Index]
 					m.startPlayback()
 				}
 			case "down", "j":
 				if m.Index < len(m.Stations)-1 {
 					m.Index++
+					m.CurrentStation = m.Stations[m.Index]
 					m.startPlayback()
 				}
 			case "enter":
 				m.ViewState = ViewPlayer
+				m.CurrentStation = m.Stations[m.Index]
 				m.startPlayback()
 			}
 
@@ -192,18 +217,15 @@ func (m *Player) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.ViewState = ViewPlayer
 				return m, nil
 			case "enter":
-				// If results are visible, enter plays the highlighted search result
+				// If search results are shown, play highlighted result directly
 				if len(m.SearchResults) > 0 {
 					selected := m.SearchResults[m.SearchIndex]
-					// Temporarily prepend or play directly
-					tempStation := config.Station{Name: selected.Name, URL: selected.URL}
-					m.Stations = append([]config.Station{tempStation}, m.Stations...)
-					m.Index = 0
+					m.CurrentStation = config.Station{Name: selected.Name, URL: selected.URL}
 					m.ViewState = ViewPlayer
 					m.startPlayback()
 					return m, nil
 				} else {
-					// Perform the search query
+					// Otherwise, submit search query
 					query := m.TextInput.Value()
 					results, err := search.SearchStations(query)
 					if err != nil {
@@ -224,14 +246,16 @@ func (m *Player) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if len(m.SearchResults) > 0 && m.SearchIndex < len(m.SearchResults)-1 {
 					m.SearchIndex++
 				}
-			case "s":
-				// Press 's' while highlighting a search result to save it to stations.json permanently
+			case "a":
+				// Save highlighted result directly from search screen
 				if len(m.SearchResults) > 0 {
-					m.saveStationToFile(m.SearchResults[m.SearchIndex])
+					selected := m.SearchResults[m.SearchIndex]
+					m.CurrentStation = config.Station{Name: selected.Name, URL: selected.URL}
+					m.saveCurrentStation()
 				}
 			}
 
-			// Pass keys to text input when typing query
+			// Pass keystrokes to search input
 			if len(m.SearchResults) == 0 || msg.String() == "backspace" || len(msg.String()) == 1 {
 				m.TextInput, cmd = m.TextInput.Update(msg)
 				return m, cmd
@@ -247,7 +271,7 @@ func (m *Player) View() string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color("63")).
 		Padding(1, 2).
-		Width(62)
+		Width(76)
 
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
@@ -271,7 +295,7 @@ func (m *Player) View() string {
 				sb.WriteString("\n")
 			}
 		}
-		sb.WriteString("\n[↑/↓] Select  [Enter] Play  [esc] Back")
+		sb.WriteString("\n[↑/↓] Select  [Enter] Play  [l/esc] Back")
 		return boxStyle.Render(sb.String())
 	}
 
@@ -280,13 +304,13 @@ func (m *Player) View() string {
 		sb.WriteString(titleStyle.Render("🔍 SEARCH RADIO BROWSER"))
 		sb.WriteString("\n\n  Search: ")
 		sb.WriteString(m.TextInput.View())
-		sb.WriteString("\n\n──────────────────────────────────────────────────────────\n")
+		sb.WriteString("\n\n──────────────────────────────────────────────────────────────────\n")
 
 		if len(m.SearchResults) == 0 {
 			sb.WriteString("\n  Type query and press [Enter] to search...\n  [esc] Back")
 		} else {
 			for i, st := range m.SearchResults {
-				if i > 8 { // Limit displayed list items for TUI fit
+				if i > 8 {
 					break
 				}
 				cursor := "  "
@@ -301,7 +325,7 @@ func (m *Player) View() string {
 					sb.WriteString("\n")
 				}
 			}
-			sb.WriteString("\n[↑/↓] Navigate  [Enter] Play  [s] Save to Config  [esc] Back")
+			sb.WriteString("\n[↑/↓] Navigate  [Enter] Preview & Play  [a] Add  [esc] Back")
 		}
 
 		if m.StatusMessage != "" {
@@ -324,23 +348,23 @@ func (m *Player) View() string {
 		return fmt.Sprintf("Error: %v\n", m.Err)
 	}
 
-	currentStation := "No stations available"
-	if len(m.Stations) > 0 {
-		currentStation = m.Stations[m.Index].Name
-		if len(currentStation) > 34 {
-			currentStation = currentStation[:31] + "..."
+	currentStation := "No station active"
+	if m.CurrentStation.Name != "" {
+		currentStation = m.CurrentStation.Name
+		if len(currentStation) > 48 {
+			currentStation = currentStation[:45] + "..."
 		}
 	}
 
 	body := fmt.Sprintf(
-		"%s\n\n  Status  : %s\n  Station : %s\n\n──────────────────────────────────────────────────────────\n  [n] Next  [p] Pause  [l] List  [s] Search  [q] Quit",
+		"%s\n\n  Status  : %s\n  Station : %s\n\n──────────────────────────────────────────────────────────────────\n  [n] Next  [p] Pause  [l] List  [s] Search  [a] Add  [q] Quit",
 		titleStyle.Render("🎵 GO CLI RADIO"),
 		statusStr,
 		lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86")).Render(currentStation),
 	)
 
 	if m.StatusMessage != "" {
-		body += fmt.Sprintf("\n  Msg: %s", m.StatusMessage)
+		body += fmt.Sprintf("\n  Msg: %s", lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render(m.StatusMessage))
 	}
 
 	return boxStyle.Render(body)
