@@ -13,6 +13,8 @@
 !*.go
 !*.json
 !*.org
+!/dist/
+!/dist/**
 !go.sum
 !go.mod
 

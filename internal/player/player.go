@@ -4,14 +4,12 @@ package player
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/arunkhattri/radio-cli/internal/config"
+	"github.com/arunkhattri/radio-cli/internal/search"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"syscall"
-
-	"github.com/arunkhattri/radio-cli/internal/config"
-	"github.com/arunkhattri/radio-cli/internal/search"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -87,14 +85,28 @@ func (m *Player) startPlayback() {
 func (m *Player) togglePause() {
 	if m.Cmd != nil && m.Cmd.Process != nil {
 		if m.IsPaused {
-			_ = m.Cmd.Process.Signal(syscall.SIGCONT)
-			m.IsPaused = false
+			if err := resumeProcess(m.Cmd); err == nil {
+				m.IsPaused = false
+			}
 		} else {
-			_ = m.Cmd.Process.Signal(syscall.SIGSTOP)
-			m.IsPaused = true
+			if err := pauseProcess(m.Cmd); err == nil {
+				m.IsPaused = true
+			}
 		}
 	}
 }
+
+// func (m *Player) togglePause() {
+// 	if m.Cmd != nil && m.Cmd.Process != nil {
+// 		if m.IsPaused {
+// 			_ = m.Cmd.Process.Signal(syscall.SIGCONT)
+// 			m.IsPaused = false
+// 		} else {
+// 			_ = m.Cmd.Process.Signal(syscall.SIGSTOP)
+// 			m.IsPaused = true
+// 		}
+// 	}
+// }
 
 // saveCurrentStation saves whichever station is currently playing into stations.json
 func (m *Player) saveCurrentStation() {
@@ -127,7 +139,10 @@ func (m *Player) saveCurrentStation() {
 		m.StatusMessage = "Error opening station file"
 		return
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
+	// defer file.Close()
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
@@ -329,7 +344,7 @@ func (m *Player) View() string {
 		}
 
 		if m.StatusMessage != "" {
-			sb.WriteString(fmt.Sprintf("\n\n  Status: %s", lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render(m.StatusMessage)))
+			fmt.Fprintf(&sb, "\n\n  Status: %s", lipgloss.NewStyle().Foreground(lipgloss.Color("214")).Render(m.StatusMessage))
 		}
 
 		return boxStyle.Render(sb.String())
