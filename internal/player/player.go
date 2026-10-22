@@ -4,12 +4,13 @@ package player
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/arunkhattri/radio-cli/internal/config"
-	"github.com/arunkhattri/radio-cli/internal/search"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/arunkhattri/radio-cli/internal/config"
+	"github.com/arunkhattri/radio-cli/internal/search"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -96,18 +97,6 @@ func (m *Player) togglePause() {
 	}
 }
 
-// func (m *Player) togglePause() {
-// 	if m.Cmd != nil && m.Cmd.Process != nil {
-// 		if m.IsPaused {
-// 			_ = m.Cmd.Process.Signal(syscall.SIGCONT)
-// 			m.IsPaused = false
-// 		} else {
-// 			_ = m.Cmd.Process.Signal(syscall.SIGSTOP)
-// 			m.IsPaused = true
-// 		}
-// 	}
-// }
-
 // saveCurrentStation saves whichever station is currently playing into stations.json
 func (m *Player) saveCurrentStation() {
 	if m.CurrentStation.URL == "" {
@@ -142,7 +131,6 @@ func (m *Player) saveCurrentStation() {
 	defer func() {
 		_ = file.Close()
 	}()
-	// defer file.Close()
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
@@ -195,8 +183,14 @@ func (m *Player) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.TextInput.Focus()
 				return m, textinput.Blink
 
-			case "a":
-				m.saveCurrentStation()
+			case "ctrl+a":
+				// Save highlighted result directly from search screen
+				if len(m.SearchResults) > 0 {
+					selected := m.SearchResults[m.SearchIndex]
+					m.CurrentStation = config.Station{Name: selected.Name, URL: selected.URL}
+					m.saveCurrentStation()
+				}
+				return m, nil
 			}
 
 		case ViewList:
@@ -231,8 +225,9 @@ func (m *Player) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "esc":
 				m.ViewState = ViewPlayer
 				return m, nil
+
 			case "enter":
-				// If search results are shown, play highlighted result directly
+				// If results are showing, Enter plays the selected station
 				if len(m.SearchResults) > 0 {
 					selected := m.SearchResults[m.SearchIndex]
 					m.CurrentStation = config.Station{Name: selected.Name, URL: selected.URL}
@@ -240,41 +235,51 @@ func (m *Player) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.startPlayback()
 					return m, nil
 				} else {
-					// Otherwise, submit search query
-					query := m.TextInput.Value()
-					results, err := search.SearchStations(query)
-					if err != nil {
-						m.StatusMessage = "No stations found"
-						m.SearchResults = nil
-					} else {
-						m.SearchResults = results
-						m.SearchIndex = 0
+					// Otherwise, submit the search query
+					query := strings.TrimSpace(m.TextInput.Value())
+					if query != "" {
+						results, err := search.SearchStations(query)
+						if err != nil || len(results) == 0 {
+							m.StatusMessage = "No stations found"
+							m.SearchResults = nil
+						} else {
+							m.SearchResults = results
+							m.SearchIndex = 0
+							m.StatusMessage = fmt.Sprintf("Found %d stations", len(results))
+						}
 					}
+					return m, nil
 				}
-				return m, nil
 
-			case "up", "k":
+			case "up":
 				if len(m.SearchResults) > 0 && m.SearchIndex > 0 {
 					m.SearchIndex--
 				}
-			case "down", "j":
+				return m, nil
+
+			case "down":
 				if len(m.SearchResults) > 0 && m.SearchIndex < len(m.SearchResults)-1 {
 					m.SearchIndex++
 				}
-			case "a":
+				return m, nil
+
+			case "ctrl+a":
 				// Save highlighted result directly from search screen
 				if len(m.SearchResults) > 0 {
 					selected := m.SearchResults[m.SearchIndex]
 					m.CurrentStation = config.Station{Name: selected.Name, URL: selected.URL}
 					m.saveCurrentStation()
 				}
+				return m, nil
 			}
 
-			// Pass keystrokes to search input
-			if len(m.SearchResults) == 0 || msg.String() == "backspace" || len(msg.String()) == 1 {
-				m.TextInput, cmd = m.TextInput.Update(msg)
-				return m, cmd
+			// Pass typing input to search text box and clear old results if text changes
+			oldVal := m.TextInput.Value()
+			m.TextInput, cmd = m.TextInput.Update(msg)
+			if m.TextInput.Value() != oldVal {
+				m.SearchResults = nil
 			}
+			return m, cmd
 		}
 	}
 
@@ -340,7 +345,7 @@ func (m *Player) View() string {
 					sb.WriteString("\n")
 				}
 			}
-			sb.WriteString("\n[↑/↓] Navigate  [Enter] Preview & Play  [a] Add  [esc] Back")
+			sb.WriteString("\n[↑/↓] Navigate  [Enter] Search / Play  [Ctrl+A] Add  [esc] Back")
 		}
 
 		if m.StatusMessage != "" {
@@ -384,3 +389,5 @@ func (m *Player) View() string {
 
 	return boxStyle.Render(body)
 }
+
+// Package player manages the Bubble Tea UI model, views, and audio playback lifecycle.
