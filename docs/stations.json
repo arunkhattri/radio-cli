@@ -1,0 +1,60 @@
+{
+  "stations": [
+    {
+      "name": "1.FM - Absolute Country Hits Radio",
+      "url": "https://strmreg.1.fm/acountry_mobile_mp3"
+    },
+    {
+      "name": "Vividh Bharti",
+      "url": "http://air.pc.cdn.bitgravity.com/air/live/pbaudio001/playlist.m3u8"
+    },
+    {
+      "name": "Kishor Kumar Hits",
+      "url": "http://stream.zeno.fm/pg6rqp8ztm0uv.m3u"
+    },
+    {
+      "name": "Big FM 92.7",
+      "url": "https://stream.zeno.fm/dbstwo3dvhhtv"
+    },
+    {
+      "name": "Radio Mirchi",
+      "url": "https://stream.zeno.fm/wgaznsmt92quv"
+    },
+    {
+      "name": "Air FM Gold",
+      "url": "https://radioindia.net/in/fmrainbowdelhi/icecast.audio"
+    },
+    {
+      "name": "Bollywood Gaane Purane",
+      "url": "https://stream.zeno.fm/6n6ewddtad0uv"
+    },
+    {
+      "name": "Radio Kantipur Nepal",
+      "url": "https://radio-broadcast.ekantipur.com/stre"
+    },
+    {
+      "name": "Radio Nepal",
+      "url": "https://stream1.radionepal.gov.np/live/"
+    },
+    {
+      "name": "BBC Nepal",
+      "url": "https://stream.live.vc.bbcmedia.co.uk/bbc_nepali_radio"
+    },
+    {
+      "name": "Hits FM 91.2 Nepal",
+      "url": "https://usa15.fastcast4u.com/proxy/hitsfm912?mp=/1"
+    },
+    {
+      "name": "1.FM - Absolute Country Hits Radio",
+      "url": "https://strmreg.1.fm/acountry_mobile_mp3"
+    },
+    {
+      "name": "Goldy Mukesh",
+      "url": "https://stream.zeno.fm/t39watus1p8uv"
+    },
+    {
+      "name": "Mukesh Radio ",
+      "url": "https://stream-014.zeno.fm/mrcz5sus1p8uv"
+    }
+  ]
+}
